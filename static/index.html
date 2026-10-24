@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PillTray — brown-bag medication reconciliation</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+.disclaimer { border: 3px solid #b00020; padding: 1rem; margin-bottom: 1.5rem; background: #fff5f5; }
+pre { background: #f4f4f4; padding: 1rem; overflow: auto; white-space: pre-wrap; }
+button, select { padding: .5rem 1rem; margin-right: .5rem; }
+table { border-collapse: collapse; margin-top: 1rem; }
+td, th { border: 1px solid #ccc; padding: .4rem .7rem; text-align: left; }
+</style>
+</head>
+<body>
+<div class="disclaimer">
+<strong>⚠️ PROOF OF CONCEPT — NOT CLINICALLY TESTED</strong>
+<p>This tool has not been tested clinically and is a proof of concept for research and software demonstration only. It is not a medical device, it does not diagnose, treat, or rule out any condition, and its outputs may be wrong, including false positives and false negatives. Do not use it to make decisions about your health. For any medical issue, seek a licensed healthcare professional. In an emergency, go to your nearest emergency room or dial 911 immediately.</p>
+</div>
+
+<h1>PillTray Set-Difference</h1>
+<p>Photograph everything in the bag or on the tray. PillTray matches the photo <em>only</em> against the patient's own expected list, and shows only the difference: missing, short, extra, unexpected, or ambiguous. A pharmacist or clinician confirms the tray. PillTray never says what anyone should take.</p>
+
+<h2>Try a synthetic demo tray</h2>
+<p>These are the same synthetic fixtures the test suite measures. They are drawn shapes, not real pill photos.</p>
+<label>Scenario
+<select id="scenario">
+  <option value="std-clean">standard — clean tray</option>
+  <option value="std-missing-atorvastatin">standard — missing medicine</option>
+  <option value="std-short-lisinopril">standard — short count</option>
+  <option value="std-duplicate-omeprazole">standard — duplicate</option>
+  <option value="std-unexpected-blue">standard — unexpected pill</option>
+  <option value="simple-clean-a">simple — clean tray</option>
+  <option value="simple-missing-vitd">simple — missing medicine</option>
+  <option value="simple-unexpected-blue">simple — unexpected pill</option>
+</select></label>
+<label>Tier
+<select id="tier">
+  <option value="frugal">frugal (local match, VLM only when ambiguous)</option>
+  <option value="full">full (VLM reads every pill + verifier)</option>
+</select></label>
+<button onclick="runDemo()">Reconcile</button>
+
+<h2>Result</h2>
+<div id="out"><em>Pick a scenario and press Reconcile.</em></div>
+
+<script>
+async function runDemo() {
+  const scenario = document.getElementById('scenario').value;
+  const tier = document.getElementById('tier').value;
+  const res = await fetch('/api/demo/reconcile?scenario=' + encodeURIComponent(scenario), {
+    method: 'POST', headers: { 'X-Tier': tier }
+  });
+  const data = await res.json();
+  const d = data.diff;
+  function rows(items, label) {
+    if (!items || !items.length) return '';
+    return '<tr><th colspan="2">' + label + '</th></tr>' +
+      items.map(i => '<tr><td>' + (i.name || i.description) + '</td><td>' +
+        JSON.stringify(i).replace(/</g, '&lt;') + '</td></tr>').join('');
+  }
+  document.getElementById('out').innerHTML =
+    '<p><strong>Summary:</strong> ' + data.summary.replace(/</g, '&lt;') + '</p>' +
+    '<table>' + rows(d.matched, 'Matched') + rows(d.missing, 'Missing') +
+    rows(d.count_mismatches, 'Count differs') + rows(d.duplicates, 'Duplicates') +
+    rows(d.unexpected, 'Unexpected') + rows(d.ambiguous, 'Ambiguous') + '</table>' +
+    '<p><strong>Call ledger:</strong> VLM calls ' + data.usage.vlm_calls +
+    ', summary calls ' + data.usage.summary_calls +
+    ', verifier calls ' + data.usage.verifier_calls +
+    ', estimated tokens ' + data.usage.est_tokens + '.</p>' +
+    '<p><strong>Planted ground truth:</strong> ' + JSON.stringify(data.planted_events) + '</p>' +
+    '<pre>' + JSON.stringify(data, null, 2).replace(/</g, '&lt;') + '</pre>';
+}
+</script>
+</body>
+</html>
